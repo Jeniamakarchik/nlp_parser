@@ -19,9 +19,11 @@ from tqdm import tqdm
 from parser_model import ParserModel
 from utils.parser_utils import minibatches, load_and_preprocess_data, AverageMeter
 
+
 parser = argparse.ArgumentParser(description='Train neural dependency parser in pytorch')
 parser.add_argument('-d', '--debug', action='store_true', help='whether to enter debug mode')
 args = parser.parse_args()
+
 
 # -----------------
 # Primary Functions
@@ -39,22 +41,8 @@ def train(parser, train_data, dev_data, output_path, batch_size=1024, n_epochs=1
     """
     best_dev_UAS = 0
 
-
-    ### YOUR CODE HERE (~2-7 lines)
-    ### TODO:
-    ###      1) Construct Adam Optimizer in variable `optimizer`
-    ###      2) Construct the Cross Entropy Loss Function in variable `loss_func` with `mean`
-    ###         reduction (default)
-    ###
-    ### Hint: Use `parser.model.parameters()` to pass optimizer
-    ###       necessary parameters to tune.
-    ### Please see the following docs for support:
-    ###     Adam Optimizer: https://pytorch.org/docs/stable/optim.html
-    ###     Cross Entropy Loss: https://pytorch.org/docs/stable/nn.html#crossentropyloss
-
-
-
-    ### END YOUR CODE
+    optimizer = torch.optim.Adam(parser.model.parameters(), lr=lr)
+    loss_func = torch.nn.CrossEntropyLoss(reduction='mean')
 
     for epoch in range(n_epochs):
         print("Epoch {:} out of {:}".format(epoch + 1, n_epochs))
@@ -82,40 +70,29 @@ def train_for_epoch(parser, train_data, dev_data, optimizer, loss_func, batch_si
 
     @return dev_UAS (float): Unlabeled Attachment Score (UAS) for dev data
     """
-    parser.model.train() # Places model in "train" mode, i.e. apply dropout layer
+    parser.model.train()  # Places model in "train" mode, i.e. apply dropout layer
     n_minibatches = math.ceil(len(train_data) / batch_size)
     loss_meter = AverageMeter()
 
     with tqdm(total=(n_minibatches)) as prog:
         for i, (train_x, train_y) in enumerate(minibatches(train_data, batch_size)):
             optimizer.zero_grad()   # remove any baggage in the optimizer
-            loss = 0. # store loss for this batch here
+
             train_x = torch.from_numpy(train_x).long()
             train_y = torch.from_numpy(train_y.nonzero()[1]).long()
 
-            ### YOUR CODE HERE (~4-10 lines)
-            ### TODO:
-            ###      1) Run train_x forward through model to produce `logits`
-            ###      2) Use the `loss_func` parameter to apply the PyTorch CrossEntropyLoss function.
-            ###         This will take `logits` and `train_y` as inputs. It will output the CrossEntropyLoss
-            ###         between softmax(`logits`) and `train_y`. Remember that softmax(`logits`)
-            ###         are the predictions (y^ from the PDF).
-            ###      3) Backprop losses
-            ###      4) Take step with the optimizer
-            ### Please see the following docs for support:
-            ###     Optimizer Step: https://pytorch.org/docs/stable/optim.html#optimizer-step
+            logits = parser.model.forward(train_x)
+            loss = loss_func(logits, train_y)
+            loss.backward()
+            optimizer.step()
 
-
-
-
-            ### END YOUR CODE
             prog.update(1)
             loss_meter.update(loss.item())
 
-    print ("Average Train Loss: {}".format(loss_meter.avg))
+    print("Average Train Loss: {}".format(loss_meter.avg))
 
     print("Evaluating on dev set",)
-    parser.model.eval() # Places model in "eval" mode, i.e. don't apply dropout layer
+    parser.model.eval()  # Places model in "eval" mode, i.e. don't apply dropout layer
     dev_UAS, _ = parser.parse(dev_data)
     print("- dev UAS: {:.2f}".format(dev_UAS * 100.0))
     return dev_UAS
