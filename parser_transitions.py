@@ -22,32 +22,25 @@ class PartialParse(object):
         self.buffer = sentence.copy()  # current buffer as a list with the first item as the first item of the list
         self.dependencies = list()  # list of dependencies, represented as a list of tuples (head, dependent)
 
-        # Note: The root token should be represented with the string "ROOT"
-        # Note: If you need to use the sentence object to initialize anything, make sure to not directly
-        #       reference the sentence object.  That is, remember to NOT modify the sentence object.
-
     def parse_step(self, transition):
         """Performs a single parse step by applying the given transition to this partial parse
 
         @param transition (str): A string that equals "S", "LA", or "RA" representing the shift,
-                                left-arc, and right-arc transitions. You can assume the provided
-                                transition is a legal transition.
+                                left-arc, and right-arc transitions.
+                                You can assume the provided transition is a legal transition.
         """
         if transition == 'S':
-            if len(self.buffer):
-                word = self.buffer.pop(0)
-                self.stack.append(word)
+            word = self.buffer.pop(0)
+            self.stack.append(word)
         elif transition == 'LA':
-            if len(self.stack):
-                head = self.stack.pop(-1)
-                dependent = self.stack.pop(-1)
-                self.dependencies.append((head, dependent))
-                self.stack.append(head)
+            head = self.stack.pop(-1)
+            dependent = self.stack.pop(-1)
+            self.dependencies.append((head, dependent))
+            self.stack.append(head)
         elif transition == 'RA':
-            if len(self.stack):
-                dependent = self.stack.pop(-1)
-                head = self.stack[-1]
-                self.dependencies.append((head, dependent))
+            dependent = self.stack.pop(-1)
+            head = self.stack[-1]
+            self.dependencies.append((head, dependent))
 
     def parse(self, transitions):
         """Applies the provided transitions to this PartialParse
@@ -88,14 +81,21 @@ def minibatch_parse(sentences, model, batch_size):
 
     while len(unfinished_parses):
         batch = unfinished_parses[:min(batch_size, len(unfinished_parses))]
+
+        # apply predicted transitions on the batch
         transitions = model.predict(batch)
         for parse, transition in zip(batch, transitions):
             parse.parse_step(transition)
 
+        # collect indexes of finished parses and remove them from the list
+        finished_ind = []
         for ind, elem in enumerate(batch):
             if len(elem.buffer) == 0 and len(elem.stack) == 1:
-                unfinished_parses.pop(ind)
+                finished_ind.append(ind)
+        for ind in finished_ind[::-1]:
+            unfinished_parses.pop(ind)
 
+        # collect all the dependencies from parses
         dependencies = [parse.dependencies for parse in partial_parses]
 
     return dependencies
@@ -190,7 +190,9 @@ def test_minibatch_parse():
     sentences = [["right", "arcs", "only"],
                  ["right", "arcs", "only", "again"],
                  ["left", "arcs", "only"],
-                 ["left", "arcs", "only", "again"]]
+                 ["left", "arcs", "only", "again"],
+                 ["I", "attended", "lectures", "in", "the", "NLP", "class"]]
+
     deps = minibatch_parse(sentences, DummyModel(), 2)
     test_dependencies("minibatch_parse", deps[0],
                       (('ROOT', 'right'), ('arcs', 'only'), ('right', 'arcs')))
